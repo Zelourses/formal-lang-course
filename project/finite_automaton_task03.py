@@ -1,9 +1,13 @@
+from networkx import MultiDiGraph, shortest_path
+from networkx.classes.reportviews import NodeView
 from pyformlang.finite_automaton import (
     DeterministicFiniteAutomaton,
     NondeterministicFiniteAutomaton,
     State,
 )
 from scipy.sparse import dok_matrix, kron
+
+from project.automata_task02 import regex_to_dfa, graph_to_nfa
 
 
 class FiniteAutomaton:
@@ -118,3 +122,21 @@ def intersect_automata(
                 final.add(State(k))
 
     return FiniteAutomaton(m, start, final, mapping)
+
+
+def paths_ends(
+    graph: MultiDiGraph, start_nodes: set[int], final_nodes: set[int], regex: str
+) -> list[tuple[NodeView, NodeView]]:
+    automaton_regex = FiniteAutomaton(regex_to_dfa(regex))
+    automaton_graph = FiniteAutomaton(graph_to_nfa(graph, start_nodes, final_nodes))
+    intersection = intersect_automata(automaton_regex, automaton_graph)
+    paths = []
+    for start in intersection.start:
+        for final in intersection.final:
+            try:
+                shortest = shortest_path(intersection, start, final)
+                paths.append((start, final))
+            except:
+                pass
+
+    return paths
