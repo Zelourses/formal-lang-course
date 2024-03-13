@@ -1,4 +1,5 @@
-from networkx import MultiDiGraph, shortest_path
+import scipy
+from networkx import MultiDiGraph
 from networkx.classes.reportviews import NodeView
 from pyformlang.finite_automaton import (
     DeterministicFiniteAutomaton,
@@ -49,7 +50,7 @@ class FiniteAutomaton:
         return nfa.accepts("".join(list(word)))
 
     def is_empty(self) -> bool:
-        return len(self.m) == 0 or len(list(self.m.values())[0]) == 0
+        return len(self.m.values()) == 0
 
     def mapping_for(self, u) -> int:
         return self.mapping[State(u)]
@@ -129,14 +130,31 @@ def paths_ends(
 ) -> list[tuple[NodeView, NodeView]]:
     automaton_regex = FiniteAutomaton(regex_to_dfa(regex))
     automaton_graph = FiniteAutomaton(graph_to_nfa(graph, start_nodes, final_nodes))
-    intersection = intersect_automata(automaton_regex, automaton_graph)
-    paths = []
-    for start in intersection.start:
-        for final in intersection.final:
-            try:
-                shortest = shortest_path(intersection, start, final)
-                paths.append((start, final))
-            except:
-                pass
+    intersection = intersect_automata(automaton_graph, automaton_regex)
+    fa_closure = make_transitive_closure(intersection)
 
-    return paths
+    size = len(automaton_regex.mapping)
+    result = []
+    for u, v in zip(*fa_closure.nonzero()):
+        if u in intersection.start and v in intersection.final:
+            result.append(
+                (automaton_graph.mapping[u // size], automaton_graph.mapping[v // size])
+            )
+
+    return result
+
+
+def make_transitive_closure(fa: FiniteAutomaton):
+    if fa.is_empty():
+        return scipy.sparse.dok_matrix((0, 0), dtype=bool)
+
+    f = None
+    for m in fa.m.values():
+        f = m if f is None else f + m
+
+    p = 0
+    while f.count_nonzero() != p:
+        p = f.count_nonzero()
+        f += f @ f
+
+    return f
