@@ -1,7 +1,7 @@
+from scipy.sparse import dok_matrix, block_diag
+
 from project.finite_automaton_task03 import (
     FiniteAutomaton,
-    intersect_automata,
-    make_transitive_closure,
 )
 
 
@@ -9,19 +9,45 @@ def reachability_with_constraints(
     fa: FiniteAutomaton, constraints_fa: FiniteAutomaton
 ) -> dict[int, set[int]]:
 
-    intersected = intersect_automata(fa, constraints_fa)
+    m, n = constraints_fa.size(), fa.size()
 
-    transitive_closure = make_transitive_closure(intersected)
+    def get_front(s):
+        front = dok_matrix((m, m + n), dtype=bool)
+        for i in constraints_fa.starts():
+            front[i, i] = True
+        for i in range(m):
+            front[i, s + m] = True
+        return front
 
-    fa_mapping = {v: i for i, v in fa.mapping.items()}
+    def diagonalized(mat):
+        result = dok_matrix(mat.shape, dtype=bool)
+        for i in range(mat.shape[0]):
+            for j in range(mat.shape[0]):
+                if mat[j, i]:
+                    result[i] += mat[j]
+        return result
 
-    result = dict()
-    for s in fa.start:
-        result[s] = set()
+    labels = fa.labels() & constraints_fa.labels()
+    result = {s: set() for s in fa.start}
+    adj = {
+        label: block_diag((constraints_fa.m[label], fa.m[label]), "csr")
+        for label in labels
+    }
 
-    fa_len = len(constraints_fa.mapping)
-    for u, v in zip(*transitive_closure.nonzero()):
-        if u in intersected.start and v in intersected.final:
-            result[fa_mapping[u // fa_len]].add(fa_mapping[v // fa_len])
+    for v in fa.starts():
+        front = get_front(v)
+        last_nnz = -1
+        for _ in range(m * n):
+            front = sum(
+                [dok_matrix((m, m + n), dtype=bool)]
+                + [diagonalized(front @ adj[label]) for label in labels]
+            )
+            k = front[:, m:].nonzero()
+            for x, y in zip(k[0], k[1]):
+                if x in constraints_fa.ends() and y in fa.ends():
+                    result[v].add(y)
+            if hash(str(k)) == last_nnz:
+                break
+            last_nnz = hash(str(k))
 
     return result

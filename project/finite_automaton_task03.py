@@ -12,7 +12,6 @@ from project.automata_task02 import regex_to_dfa, graph_to_nfa
 
 
 class FiniteAutomaton:
-
     m = None
     start = None
     final = None
@@ -52,8 +51,20 @@ class FiniteAutomaton:
     def is_empty(self) -> bool:
         return len(self.m.values()) == 0
 
-    def mapping_for(self, u) -> int:
+    def mapping_for(self, u) -> State:
         return self.mapping[State(u)]
+
+    def size(self):
+        return len(self.mapping)
+
+    def starts(self):
+        return [self.mapping_for(t) for t in self.start]
+
+    def ends(self):
+        return [self.mapping_for(t) for t in self.final]
+
+    def labels(self):
+        return self.mapping.keys()
 
 
 def nfa_to_matrix(automaton: NondeterministicFiniteAutomaton) -> FiniteAutomaton:
@@ -98,9 +109,13 @@ def matrix_to_nfa(automaton: FiniteAutomaton) -> NondeterministicFiniteAutomaton
 
 
 def intersect_automata(
-    automaton1: FiniteAutomaton, automaton2: FiniteAutomaton
+    automaton1: FiniteAutomaton, automaton2: FiniteAutomaton, take_from_mapping=False
 ) -> FiniteAutomaton:
-    labels = automaton1.m.keys() & automaton2.m.keys()
+    labels = None
+    if take_from_mapping:
+        labels = automaton1.mapping.keys() & automaton2.mapping.keys()
+    else:
+        labels = automaton1.m.keys() & automaton2.m.keys()
     m = dict()
     start = set()
     final = set()
@@ -128,13 +143,13 @@ def intersect_automata(
 def paths_ends(
     graph: MultiDiGraph, start_nodes: set[int], final_nodes: set[int], regex: str
 ) -> list[tuple[NodeView, NodeView]]:
-    automaton_regex = FiniteAutomaton(regex_to_dfa(regex))
-    automaton_graph = FiniteAutomaton(graph_to_nfa(graph, start_nodes, final_nodes))
-    intersection = intersect_automata(automaton_graph, automaton_regex)
+    automaton_regex = nfa_to_matrix(regex_to_dfa(regex))
+    automaton_graph = nfa_to_matrix(graph_to_nfa(graph, start_nodes, final_nodes))
+    intersection = intersect_automata(automaton_graph, automaton_regex, True)
     fa_closure = make_transitive_closure(intersection)
 
-    size = len(automaton_regex.mapping)
-    result = []
+    size = automaton_regex.size()
+    result = list()
     for u, v in zip(*fa_closure.nonzero()):
         if u in intersection.start and v in intersection.final:
             result.append(
@@ -146,7 +161,7 @@ def paths_ends(
 
 def make_transitive_closure(fa: FiniteAutomaton):
     if fa.is_empty():
-        return scipy.sparse.dok_matrix((0, 0), dtype=bool)
+        return dok_matrix((0, 0), dtype=bool)
 
     f = None
     for m in fa.m.values():
