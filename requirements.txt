@@ -1,9 +1,9 @@
 antlr4-python3-runtime
 black
-cfpq_data
+cfpq-data
+grammarinator @ git+https://github.com/renatahodovan/grammarinator.git@f3ffa71
 networkx==3.2.1
 pre-commit
 pydot
-pyformlang
 pytest
 scipy
