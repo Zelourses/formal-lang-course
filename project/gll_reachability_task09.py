@@ -22,10 +22,12 @@ def cfpq_with_gll(
         else cfg_to_rsm(cfg_or_rsm)
     )
 
-    start_nodes = graph.nodes if start_nodes is None else start_nodes
-    final_nodes = graph.nodes if final_nodes is None else final_nodes
+    start_nodes = set(graph.nodes) if start_nodes is None else start_nodes
+    final_nodes = set(graph.nodes) if final_nodes is None else final_nodes
 
-    rsm_start_nonterminal = rsm.initial_label.value
+    rsm_start_nonterminal = (
+        rsm.initial_label.value if rsm.initial_label.value is not None else "S"
+    )
 
     stack_start_states = {
         (rsm_start_nonterminal, start_node) for start_node in start_nodes
