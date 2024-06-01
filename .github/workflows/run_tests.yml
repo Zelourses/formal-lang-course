@@ -18,6 +18,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: ANTLR grammar generation
+        run : |
+          antlr4 -Dlanguage=Python3 -Xexact-output-dir project/graphminusminus.g4 -o project/graphminusminus
 
       - name: Run tests
         run: |

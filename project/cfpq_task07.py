@@ -1,6 +1,6 @@
 import pyformlang
 from pyformlang.cfg import Terminal
-from scipy.sparse import dok_matrix
+from scipy.sparse import lil_matrix
 
 import networkx as nx
 from typing import *
@@ -20,46 +20,55 @@ def cfpq_with_matrix(
     start_nodes = graph.nodes if start_nodes is None else start_nodes
     final_nodes = graph.nodes if final_nodes is None else final_nodes
     cfg = cfg_to_weak_normal_form(cfg)
+    n = len(graph.nodes)
 
-    M = {
-        p.head.to_text(): dok_matrix(
-            (graph.number_of_nodes(), graph.number_of_nodes()), dtype=bool
-        )
-        for p in cfg.productions
-    }
+    epsilons = set()
+    terminals = {}
+    mults = {}
 
-    t_to_Ts = {}
+    # changing the sparsity structure of a csr_matrix is expensive. lil_matrix is more efficient (c) scipy warning
+    productions: dict[Any, lil_matrix] = {}
+
     for p in cfg.productions:
-        if len(p.body) == 1 and isinstance(p.body[0], Terminal):
-            t_to_Ts.setdefault(p.body[0].to_text(), set()).add(p.head.to_text())
-
-    for b, e, t in graph.edges(data="label"):
-        if t in t_to_Ts:
-            for T in t_to_Ts[t]:
-                M[T][b, e] = True
-
-    N_to_eps = {p.head.to_text() for p in cfg.productions if len(p.body) == 0}
-    for N in N_to_eps:
-        M[N].setdiag(True)
-
-    M_new = copy.deepcopy(M)
-    for m in M_new.values():
-        m.clear()
-
-    N_to_NN = {}
-    for p in cfg.productions:
-        if len(p.body) == 2:
-            N_to_NN.setdefault(p.head.to_text(), set()).add(
-                (p.body[0].to_text(), p.body[1].to_text())
+        pLen = len(p.body)
+        if pLen == 0:
+            epsilons.add(p.head.value)
+        elif pLen == 1 and isinstance(p.body[0], Terminal):
+            terminals.setdefault(p.body[0].value, set()).add(p.head.value)
+        elif pLen == 2:
+            mults.setdefault(p.head.value, set()).add(
+                (p.body[0].value, p.body[1].value)
             )
 
-    for i in range(graph.number_of_nodes() ** 2):
-        for N, NN in N_to_NN.items():
-            for Nl, Nr in NN:
-                M_new[N] += M[Nl] @ M[Nr]
-        for N, m in M_new.items():
-            M[N] += m
+        productions[p.head.value] = lil_matrix((n, n), dtype=bool)
 
-    S = cfg.start_symbol.to_text()
-    ns, ms = M[S].nonzero()
-    return {(n, m) for n, m in zip(ns, ms) if n in start_nodes and m in final_nodes}
+    accumated = copy.deepcopy(productions)
+
+    for n, m, tag in graph.edges.data("label"):
+        if tag in terminals:
+            for terminalN in terminals[tag]:
+                productions[terminalN][n, m] = True
+
+    for eps in epsilons:
+        productions[eps].setdiag(True)
+
+    newVals = True
+    while newVals:
+        newVals = False
+        for multN, mult in mults.items():
+            prev = accumated[multN].nnz
+            for l, r in mult:
+                accumated[multN] += productions[l] @ productions[r]
+
+            newVals |= prev != accumated[multN].nnz
+        if newVals:
+            for accN, m in accumated.items():
+                productions[accN] += m
+
+    start = cfg.start_symbol.value
+
+    return {
+        (n, m)
+        for n, m in zip(*productions[start].nonzero())
+        if n in start_nodes and m in final_nodes
+    }
